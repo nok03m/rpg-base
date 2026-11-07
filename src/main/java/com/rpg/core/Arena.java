@@ -23,14 +23,17 @@ public class Arena {
         this.azar = azar;
     }
 
-    /** Procesa efectos y aturdimiento. @return true si el personaje puede actuar este turno */
+    /**
+     * Procesa el inicio de turno: regeneraciones de clase y aturdimiento.
+     * TALLER CONCURRENCIA: los efectos DoT/HoT ya NO se procesan aqui turno a turno:
+     * cada efecto corre en su propio hilo (EfectoContinuoTask) y aplica sus ticks de
+     * forma continua, incluso entre turnos. Por eso ya no se llama a procesarEfectos.
+     * @return true si el personaje puede actuar este turno
+     */
     public boolean iniciarTurno(Personaje personaje) {
         personaje.alIniciarTurno();
-        for (String mensaje : personaje.procesarEfectos()) {
-            registro.agregar(mensaje);
-        }
         if (!personaje.estaVivo()) {
-            registro.agregar("%s cae derrotado por sus efectos", personaje.getNombre());
+            registro.agregar("%s cayo por los danos de sus efectos", personaje.getNombre());
             return false;
         }
         if (personaje.consumirAturdimiento()) {
@@ -77,10 +80,29 @@ public class Arena {
 
     /** Pelea hasta que uno cae (o se acaban las rondas). @return el ganador */
     public Personaje duelo(Personaje a, Personaje b) {
+        return duelo(a, b, 0);
+    }
+
+    /**
+     * Duelo con una pausa opcional entre rondas. TALLER CONCURRENCIA: el torneo usa
+     * una pausa pequena (pense del gladiador) para que la ejecucion paralela de las
+     * semifinales sea visible en los Thread.getState() y en el reloj; sin pausa, un
+     * duelo entero termina en menos de un milisegundo y no daria tiempo a observar
+     * los estados RUNNABLE / TIMED_WAITING del ciclo de vida del hilo.
+     */
+    public Personaje duelo(Personaje a, Personaje b, long pausaEntreRondasMs) {
         for (int ronda = 1; ronda <= MAXIMO_RONDAS && a.estaVivo() && b.estaVivo(); ronda++) {
             registro.agregar("-- Ronda %d --", ronda);
             turnoAutomatico(a, b);
             turnoAutomatico(b, a);
+            if (pausaEntreRondasMs > 0) {
+                try {
+                    Thread.sleep(pausaEntreRondasMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
         }
         return a.getVida() >= b.getVida() ? a : b;
     }

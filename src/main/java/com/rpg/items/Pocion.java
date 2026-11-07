@@ -3,8 +3,14 @@ package com.rpg.items;
 import com.rpg.entities.EstadoEfecto;
 import com.rpg.entities.enums.RaridadItem;
 
-// TALLER ARCHIVOS: candidata a Serializable (guarda un EstadoEfecto, que tambien debe serlo).
-public class Pocion {
+import java.io.Serial;
+import java.io.Serializable;
+
+// TALLER ARCHIVOS (seccion 5): Serializable; guarda un EstadoEfecto (tambien Serializable).
+public class Pocion implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private final String nombre;
     private final int curacion;

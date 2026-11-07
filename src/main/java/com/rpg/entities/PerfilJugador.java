@@ -1,11 +1,17 @@
 package com.rpg.entities;
 
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
 import java.util.TreeSet;
 
-// TALLER ARCHIVOS: candidata a Serializable (victorias, derrotas y logros son parte de la partida).
-public class PerfilJugador {
+// TALLER ARCHIVOS (seccion 5): Serializable (victorias, derrotas y logros son parte de la partida).
+public class PerfilJugador implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private int victorias;
     private int derrotas;
@@ -35,5 +41,19 @@ public class PerfilJugador {
     /** Los logros salen ordenados alfabeticamente porque se guardan en un TreeSet. */
     public Set<String> getLogros() {
         return Collections.unmodifiableSet(logros);
+    }
+
+    /**
+     * TALLER ARCHIVOS (seccion 5): restaura el perfil desde una partida cargada del .dat.
+     * @return true si el perfil cargado era distinto del actual
+     */
+    public boolean restaurar(int victoriasGuardadas, int derrotasGuardadas, Collection<String> logrosGuardados) {
+        boolean cambio = this.victorias != victoriasGuardadas || this.derrotas != derrotasGuardadas
+                || !logros.equals(new TreeSet<>(logrosGuardados));
+        this.victorias = victoriasGuardadas;
+        this.derrotas = derrotasGuardadas;
+        logros.clear();
+        logros.addAll(logrosGuardados);
+        return cambio;
     }
 }

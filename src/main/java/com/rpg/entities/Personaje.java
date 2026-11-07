@@ -6,21 +6,28 @@ import com.rpg.exceptions.SinManaException;
 import com.rpg.items.Inventario;
 import com.rpg.items.Pocion;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-// TALLER ARCHIVOS: para guardar la partida con ObjectOutputStream, Personaje debe volverse Serializable
-// (con serialVersionUID). Piensa que campos son transient y que clases anidadas (Inventario, Pocion, Arma,
-// Gremio, EstadoEfecto, enums) tambien deben ser Serializable, o tendras NotSerializableException.
-// Ojo: Gremio y Personaje se referencian entre si (la serializacion maneja el ciclo).
-public abstract class Personaje implements ICombatiente {
+// TALLER ARCHIVOS (seccion 5): Personaje ahora ES Serializable, asi que la partida se puede
+// guardar con ObjectOutputStream en un .dat. Todos los objetos alcanzables desde aqui tambien
+// lo son (Arma, Gremio, Inventario, Pocion, EstadoEfecto; los enums lo son por definicion en Java).
+// El ciclo Personaje <-> Gremio no es problema: la serializacion sigue las referencias una sola
+// vez y al cargar recupera exactamente la misma red de objetos.
+public abstract class Personaje implements ICombatiente, Serializable {
+
+    // serialVersionUID: numero de version de la clase. Si al deserializar la clase cambio tanto
+    // que el UID del archivo y el de la clase no coinciden, Java lanza InvalidClassException en
+    // lugar de reconstruir un objeto a medio compatible: falla temprano y de forma clara.
 
     private static final int VIDA_BASE = 100;
     private static final int ATAQUE_BASE = 10;
@@ -28,6 +35,9 @@ public abstract class Personaje implements ICombatiente {
     private static final int CAPACIDAD_INVENTARIO = 3;
     private static final int DANIO_MINIMO = 1;
     private static final double PORCENTAJE_TOTAL = 100.0;
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     protected String nombre;
     private final TipoPersonaje tipo;
@@ -37,13 +47,42 @@ public abstract class Personaje implements ICombatiente {
     private final int defensaBase;
     protected int posicionX;
     protected int posicionY;
-    private EstadoPersonaje estado = EstadoPersonaje.VIVO;
+    // TALLER CONCURRENCIA: volatile porque el estado se escribe desde varios candados
+    // (el de vida y el monitor de efectos) y se lee desde cualquier hilo; volatile
+    // garantiza que todos vean el ultimo valor escrito.
+    private volatile EstadoPersonaje estado = EstadoPersonaje.VIVO;
 
     private Arma arma;                  // asociacion 0..1
     private Gremio gremio;              // asociacion bidireccional 0..1
     private final Inventario<Pocion> inventario = new Inventario<>(CAPACIDAD_INVENTARIO); // composicion
     private final Set<String> habilidades = new HashSet<>();
     private final Map<String, EstadoEfecto> efectos = new LinkedHashMap<>();
+
+    // TALLER CONCURRENCIA (seccion 6): vida y estado los escriben varios hilos a la vez
+    // (hilo principal, hilos de efectos DoT/HoT, torneo en paralelo). Se protegen con un
+    // unico candado para que nunca queden inconsistentes entre si (por ejemplo, un
+    // aturdimiento que revive a un MUERTO).
+    //
+    // ReentrantLock (investigacion obligatoria) en lugar de synchronized para la vida:
+    // lock()/unlock() van SIEMPRE en try-finally; si unlock() no estuviera en el finally,
+    // una excepcion dejaria el candado tomado para siempre y el juego se congelaria.
+    // Cuando preferir ReentrantLock a synchronized (2-3 lineas): cuando necesites funciones
+    // que synchronized no ofrece, como tryLock() con tiempo maximo de espera, lockInterruptibly()
+    // (abortar la espera con interrupt()), fairness configurable o varias Condition. Para secciones
+    // criticas simples como esta, synchronized seria igual de correcto; aca se usa ReentrantLock
+    // para demostrar el mecanismo alternativo que pide la investigacion.
+    private final ReentrantLock candadoVida = new ReentrantLock();
+
+    // TALLER CONCURRENCIA (seccion 2): cuando el dominio aplica o quita un efecto, avisa a
+    // este oyente para que el efecto corra en su propio hilo (o se cancele con interrupt()).
+    // El Personaje no conoce hilos: solo esta interfaz. Puede ser null (juego secuencial).
+    //
+    // TALLER ARCHIVOS (seccion 5): transient. El oyente apunta a objetos vivos de hilos
+    // (GestorEfectos y sus EfectoContinuoTask); si se intentara guardar con el oyente puesto,
+    // ObjectOutputStream lanzaria NotSerializableException por esa rama del grafo. Un oyente
+    // tampoco tiene sentido en disco: al cargar vuelve con su valor por defecto (null) y el
+    // personaje queda en modo secuencial hasta que un combate nuevo lo conecte otra vez.
+    private transient volatile OyenteEfectos oyenteEfectos;
 
     protected Personaje(String nombre, TipoPersonaje tipo) {
         this(nombre, tipo, VIDA_BASE, ATAQUE_BASE, DEFENSA_BASE, 0, 0);
@@ -119,13 +158,24 @@ public abstract class Personaje implements ICombatiente {
 
     // ---- vida
 
+    /**
+     * Reduce la vida del personaje. Antes de la version concurrente este metodo leia la vida,
+     * calculaba y escribia en pasos separados SIN proteccion: con dos hilos (un veneno y un
+     * ataque) ambos podian leer el mismo valor y uno de los dos danios se PERDIA
+     * (condicion de carrera perdida de actualizacion). Hoy todo el leer-calcular-escribir
+     * ocurre dentro del candado: las operaciones son atomicas entre si.
+     */
     public void recibirDanio(int cantidad) {
         if (cantidad < 0) {
             throw new IllegalArgumentException("El danio no puede ser negativo");
         }
-        // TALLER CONCURRENCIA: lee, calcula y escribe la vida en pasos separados sin proteccion.
-        // Con varios hilos sobre el mismo Personaje (aqui y en curar), el resultado no es seguro.
-        setVida(vida - cantidad);
+        candadoVida.lock();
+        try {
+            setVida(vida - cantidad);
+        } finally {
+            // unlock() SIEMPRE en finally: sin esto, una excepcion dejaria el candado tomado.
+            candadoVida.unlock();
+        }
     }
 
     /** @return vida realmente recuperada */
@@ -133,85 +183,120 @@ public abstract class Personaje implements ICombatiente {
         if (cantidad < 0) {
             throw new IllegalArgumentException("La curacion no puede ser negativa");
         }
-        if (!estaVivo()) {
-            return 0;
+        candadoVida.lock();
+        try {
+            if (estado == EstadoPersonaje.MUERTO) {
+                return 0;
+            }
+            int vidaAntes = vida;
+            setVida(vida + cantidad);
+            return vida - vidaAntes;
+        } finally {
+            candadoVida.unlock();
         }
-        int vidaAntes = vida;
-        setVida(vida + cantidad);
-        return vida - vidaAntes;
     }
 
     public void restaurarVida() {
-        efectos.clear();
-        estado = EstadoPersonaje.VIVO;
-        vida = vidaMaxima;
+        // El oyente (GestorEfectos) debe haber detenido los hilos de efectos antes de
+        // restaurar (MotorJuego y TorneoManager llaman detenerTodo() al cerrar un combate).
+        synchronized (this) {
+            efectos.clear();
+        }
+        candadoVida.lock();
+        try {
+            estado = EstadoPersonaje.VIVO;
+            vida = vidaMaxima;
+        } finally {
+            candadoVida.unlock();
+        }
     }
 
     @Override
     public boolean estaVivo() {
-        return estado != EstadoPersonaje.MUERTO;
+        candadoVida.lock();
+        try {
+            return estado != EstadoPersonaje.MUERTO;
+        } finally {
+            candadoVida.unlock();
+        }
+    }
+
+    /** Registra quien debe crear/interrumpir los hilos de efectos (o null para nada). */
+    public void setOyenteEfectos(OyenteEfectos oyente) {
+        this.oyenteEfectos = oyente;
+    }
+
+    /** TALLER ARCHIVOS: expone el oyente para comprobar en la prueba que transient vuelve como null. */
+    public OyenteEfectos getOyenteEfectos() {
+        return oyenteEfectos;
     }
 
     // ---- efectos DoT / HoT (hoy se procesan por turno, de forma secuencial)
 
+    /**
+     * Guarda el efecto y avisa al oyente para que arranque su hilo DoT/HoT
+     * (EfectoContinuoTask). Si no hay oyente, el efecto queda registrado pero sin
+     * ticks (modo secuencial).
+     */
     public void aplicarEfecto(EstadoEfecto efecto) {
-        efectos.put(efecto.getNombre(), efecto.copia());
-        if (efecto.esDanio() && estado == EstadoPersonaje.VIVO) {
-            estado = EstadoPersonaje.ENVENENADO;
+        EstadoEfecto copia = efecto.copia();
+        OyenteEfectos oyente = oyenteEfectos;   // lectura unica: estable durante toda la operacion
+        synchronized (this) {
+            efectos.put(copia.getNombre(), copia);
+            if (efecto.esDanio() && estado == EstadoPersonaje.VIVO) {
+                estado = EstadoPersonaje.ENVENENADO;
+            }
+        }
+        if (oyente != null) {
+            // Fuera del monitor: el oyente arranca un hilo nuevo; no queremos candados
+            // cruzados entre el Personaje y el GestorEfectos (riesgo de deadlock).
+            oyente.efectoAplicado(this, copia);
         }
     }
 
     public boolean quitarEfecto(String nombreEfecto) {
-        if (efectos.remove(nombreEfecto) == null) {
-            return false;
+        OyenteEfectos oyente;
+        boolean quitado;
+        synchronized (this) {
+            quitado = efectos.remove(nombreEfecto) != null;
+            if (quitado) {
+                normalizarEstado();
+            }
         }
-        normalizarEstado();
-        return true;
+        if (quitado) {
+            oyente = oyenteEfectos;
+            if (oyente != null) {
+                // Fuera del monitor: el oyente interrumpe el hilo del efecto.
+                oyente.efectoQuitado(this, nombreEfecto);
+            }
+        }
+        return quitado;
     }
 
+    /** Antidoto / purificacion: quita todos los DoT e interrumpe sus hilos. */
     public void quitarEfectosDanio() {
-        for (String nombreEfecto : new ArrayList<>(efectos.keySet())) {
-            if (efectos.get(nombreEfecto).esDanio()) {
-                quitarEfecto(nombreEfecto);
+        List<String> nombresDanio;
+        synchronized (this) {
+            nombresDanio = new ArrayList<>();
+            for (Map.Entry<String, EstadoEfecto> entrada : efectos.entrySet()) {
+                if (entrada.getValue().esDanio()) {
+                    nombresDanio.add(entrada.getKey());
+                }
             }
+        }
+        for (String nombreEfecto : nombresDanio) {
+            quitarEfecto(nombreEfecto);
         }
     }
 
     /**
-     * Aplica un tick de cada efecto activo.
-     * @return mensajes para el registro de combate
+     * REEMPLAZADO POR HILOS: antes este metodo aplicaba un tick de cada efecto turno a
+     * turno desde Arena.iniciarTurno / BatallaTablero. Desde el taller de concurrencia
+     * cada efecto tiene su propio hilo (EfectoContinuoTask) que aplica ticks cada cierto
+     * intervalo y se cancela con interrupt(). Aqui ya no se procesa nada por turno.
      */
-    public List<String> procesarEfectos() {
-        // TALLER CONCURRENCIA: cada efecto se procesa aqui, turno a turno. Piensa que pasaria
-        // si cada uno corriera por su cuenta y hubiera que cancelarlo a mitad de camino.
-        List<String> mensajes = new ArrayList<>();
-        Iterator<EstadoEfecto> iterador = efectos.values().iterator();
-        while (iterador.hasNext()) {
-            EstadoEfecto efecto = iterador.next();
-            mensajes.add(aplicarTick(efecto));
-            efecto.consumirTurno();
-            if (efecto.haTerminado()) {
-                iterador.remove();
-                mensajes.add(nombre + ": termina " + efecto.getNombre());
-            }
-            if (!estaVivo()) {
-                break;
-            }
-        }
-        normalizarEstado();
-        return mensajes;
-    }
 
-    private String aplicarTick(EstadoEfecto efecto) {
-        if (efecto.esDanio()) {
-            recibirDanio(efecto.getValorPorTick());
-            return String.format("%s sufre %d de dano por %s", nombre, efecto.getValorPorTick(), efecto.getNombre());
-        }
-        int curado = curar(efecto.getValorPorTick());
-        return String.format("%s recupera %d de vida por %s", nombre, curado, efecto.getNombre());
-    }
-
-    private boolean tieneEfectoDanio() {
+    private synchronized boolean tieneEfectoDanio() {
         for (EstadoEfecto efecto : efectos.values()) {
             if (efecto.esDanio()) {
                 return true;
@@ -221,7 +306,7 @@ public abstract class Personaje implements ICombatiente {
     }
 
     /** Si ya no queda ningun DoT, un personaje ENVENENADO vuelve a estar VIVO. */
-    private void normalizarEstado() {
+    private synchronized void normalizarEstado() {
         if (estado == EstadoPersonaje.ENVENENADO && !tieneEfectoDanio()) {
             estado = EstadoPersonaje.VIVO;
         }
@@ -230,18 +315,28 @@ public abstract class Personaje implements ICombatiente {
     // ---- aturdimiento
 
     public void aturdir() {
-        if (estaVivo()) {
-            estado = EstadoPersonaje.ATURDIDO;
+        candadoVida.lock();
+        try {
+            if (estado != EstadoPersonaje.MUERTO) {
+                estado = EstadoPersonaje.ATURDIDO;
+            }
+        } finally {
+            candadoVida.unlock();
         }
     }
 
     /** @return true si estaba aturdido (y por tanto pierde este turno) */
     public boolean consumirAturdimiento() {
-        boolean estabaAturdido = estado == EstadoPersonaje.ATURDIDO;
-        if (estabaAturdido) {
-            estado = tieneEfectoDanio() ? EstadoPersonaje.ENVENENADO : EstadoPersonaje.VIVO;
+        candadoVida.lock();
+        try {
+            boolean estabaAturdido = estado == EstadoPersonaje.ATURDIDO;
+            if (estabaAturdido) {
+                estado = tieneEfectoDanio() ? EstadoPersonaje.ENVENENADO : EstadoPersonaje.VIVO;
+            }
+            return estabaAturdido;
+        } finally {
+            candadoVida.unlock();
         }
-        return estabaAturdido;
     }
 
     // ---- inventario, arma, gremio, habilidades
@@ -292,10 +387,20 @@ public abstract class Personaje implements ICombatiente {
 
     // ---- getters y setters validados
 
+    /**
+     * Fija la vida acotandola a 0..vidaMaxima y actualiza el estado. Reentrante:
+     * si ya se esta dentro de recibirDanio/curar (mismo hilo con el candado tomado),
+     * el lock() adicional no se bloquea a si mismo.
+     */
     public void setVida(int nuevaVida) {
-        vida = Math.max(0, Math.min(nuevaVida, vidaMaxima));
-        if (vida == 0) {
-            estado = EstadoPersonaje.MUERTO;
+        candadoVida.lock();
+        try {
+            vida = Math.max(0, Math.min(nuevaVida, vidaMaxima));
+            if (vida == 0) {
+                estado = EstadoPersonaje.MUERTO;
+            }
+        } finally {
+            candadoVida.unlock();
         }
     }
 
@@ -325,7 +430,12 @@ public abstract class Personaje implements ICombatiente {
     }
 
     public int getVida() {
-        return vida;
+        candadoVida.lock();
+        try {
+            return vida;
+        } finally {
+            candadoVida.unlock();
+        }
     }
 
     public int getPosicionX() {
@@ -360,7 +470,10 @@ public abstract class Personaje implements ICombatiente {
         return Collections.unmodifiableSet(habilidades);
     }
 
+    /** Copia instantanea de los efectos: segura de leer mientras los hilos los cambian. */
     public Collection<EstadoEfecto> getEfectos() {
-        return Collections.unmodifiableCollection(efectos.values());
+        synchronized (this) {
+            return new ArrayList<>(efectos.values());
+        }
     }
 }

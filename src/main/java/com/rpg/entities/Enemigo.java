@@ -2,8 +2,14 @@ package com.rpg.entities;
 
 import com.rpg.entities.enums.TipoPersonaje;
 
+import java.io.Serial;
+
 /** Monstruo del bestiario. Su ataque especial pega fuerte y puede envenenar, quemar o aturdir. */
 public class Enemigo extends Personaje {
+
+    // Hereda Serializable de Personaje; el UID propio cubre los campos de esta clase.
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final double MULTIPLICADOR_ESPECIAL = 1.5;
 

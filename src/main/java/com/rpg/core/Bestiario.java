@@ -68,4 +68,15 @@ public class Bestiario {
         }
         return derrotados.toString();
     }
+
+    /** TALLER ARCHIVOS (seccion 5): copia del contador de derrotas para incluirlo en la partida guardada. */
+    public Map<String, Integer> derrotadosSnapshot() {
+        return new LinkedHashMap<>(derrotados);
+    }
+
+    /** TALLER ARCHIVOS (seccion 5): restaura el contador de derrotas desde una partida cargada. */
+    public void restaurarDerrotados(Map<String, Integer> guardados) {
+        derrotados.clear();
+        derrotados.putAll(guardados);
+    }
 }

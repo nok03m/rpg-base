@@ -2,14 +2,21 @@ package com.rpg.items;
 
 import com.rpg.exceptions.CapacidadExcedidaException;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
 /** Contenedor generico con capacidad limitada: Inventario&lt;Pocion&gt; solo acepta pociones. */
-// TALLER ARCHIVOS: debe volverse Serializable; ademas, los elementos T (hoy Pocion) tambien lo necesitan.
-public class Inventario<T> implements Iterable<T> {
+// TALLER ARCHIVOS (seccion 5): Serializable. La generica guarda elementos T: al serializar el
+// Inventario, cada elemento Pocion (tambien Serializable) se guarda dentro. Si mañana T fuera
+// una clase que no lo sea, ObjectOutputStream lanzaria NotSerializableException en el guardar.
+public class Inventario<T> implements Iterable<T>, Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private final List<T> elementos = new ArrayList<>();
     private final int capacidad;

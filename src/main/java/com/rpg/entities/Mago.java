@@ -5,7 +5,13 @@ import com.rpg.entities.enums.TipoEfecto;
 import com.rpg.entities.enums.TipoPersonaje;
 import com.rpg.exceptions.SinManaException;
 
+import java.io.Serial;
+
 public class Mago extends Personaje {
+
+    // Hereda Serializable de Personaje; el UID propio cubre los campos de esta clase.
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private static final int VIDA = 80;
     private static final int ATAQUE = 14;

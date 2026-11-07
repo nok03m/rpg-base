@@ -1,5 +1,6 @@
 package com.rpg.core;
 
+import com.rpg.concurrency.GestorEfectos;
 import com.rpg.entities.Enemigo;
 import com.rpg.entities.Escuadron;
 import com.rpg.entities.Guerrero;
@@ -31,6 +32,8 @@ public class BatallaTablero {
     private static final int CAPACIDAD_PROVISIONES = 5;
     private static final int POCIONES_INICIALES = 3;
     private static final int CURACION_POCION = 30;
+    /** Intervalo entre ticks de los efectos DoT/HoT en hilos (mismo valor que MotorJuego). */
+    private static final long INTERVALO_TICK_EFECTO_MS = 1500;
 
     private final Consola consola;
     private final RegistroCombate registro;
@@ -51,6 +54,41 @@ public class BatallaTablero {
         registro.agregar("%n=== MISION: EL COFRE DEL CENTRO ===");
         registro.agregar("Elimina a los enemigos o lleva a %s hasta el cofre [C].", heroePrincipal.getNombre());
 
+        boolean victoria;
+
+        // TALLER CONCURRENCIA (seccion 2): igual que en el combate rapido, si algun efecto
+        // DoT/HoT se aplicara durante la mision, correria en su propio hilo; al cerrar la
+        // mision se interrumpe todo con detenerTodo() (en un finally, por cualquier salida).
+        GestorEfectos gestorEfectos = new GestorEfectos(INTERVALO_TICK_EFECTO_MS, registro);
+        for (Personaje heroe : heroes) {
+            heroe.setOyenteEfectos(gestorEfectos);
+        }
+        for (Personaje enemigo : enemigos) {
+            enemigo.setOyenteEfectos(gestorEfectos);
+        }
+        try {
+            victoria = jugarRondas(tablero, heroes, enemigos, provisiones, heroePrincipal);
+        } finally {
+            gestorEfectos.detenerTodo();
+            for (Personaje heroe : heroes) {
+                heroe.setOyenteEfectos(null);
+            }
+            for (Personaje enemigo : enemigos) {
+                enemigo.setOyenteEfectos(null);
+            }
+        }
+
+        renderizar(tablero, heroes, enemigos);
+        if (victoria) {
+            registro.agregar("%n¡VICTORIA! El escuadron %s cumple la mision.", heroes.getNombre());
+        } else {
+            registro.agregar("%nDERROTA. El escuadron %s ha caido en combate.", heroes.getNombre());
+        }
+    }
+
+    /** @return true si la mision termino en victoria */
+    private boolean jugarRondas(Tablero tablero, Escuadron heroes, List<Personaje> enemigos,
+                                Inventario<Pocion> provisiones, Personaje heroePrincipal) {
         boolean victoria = false;
         boolean derrota = false;
         int ronda = 1;
@@ -67,13 +105,7 @@ public class BatallaTablero {
             derrota = heroes.estaVacio() || heroes.totalVida() <= 0;
             ronda++;
         } while (!victoria && !derrota);
-
-        renderizar(tablero, heroes, enemigos);
-        if (victoria) {
-            registro.agregar("%n¡VICTORIA! El escuadron %s cumple la mision.", heroes.getNombre());
-        } else {
-            registro.agregar("%nDERROTA. El escuadron %s ha caido en combate.", heroes.getNombre());
-        }
+        return victoria;
     }
 
     // ---- inicializacion
@@ -141,18 +173,12 @@ public class BatallaTablero {
     private void procesarInicioDeRonda(Escuadron heroes, List<Personaje> enemigos) {
         for (Personaje heroe : heroes) {
             heroe.alIniciarTurno();
-            registrarEfectos(heroe);
         }
         for (Personaje enemigo : enemigos) {
             enemigo.alIniciarTurno();
-            registrarEfectos(enemigo);
         }
-    }
-
-    private void registrarEfectos(Personaje personaje) {
-        for (String mensaje : personaje.procesarEfectos()) {
-            registro.agregar(mensaje);
-        }
+        // TALLER CONCURRENCIA: los efectos ya no se procesan aqui; sus hilos aplican los
+        // ticks de forma continua y las bajas por veneno se detectan con estaVivo().
     }
 
     private void renderizar(Tablero tablero, Escuadron heroes, List<Personaje> enemigos) {

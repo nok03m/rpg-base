@@ -22,17 +22,41 @@ public class Main {
         int opcion;
         do {
             mostrarMenu();
-            // TALLER ARCHIVOS: aqui podrias ofrecer "Cargar partida" (y ver/borrar archivos con File), leyendo
-            // el archivo con ObjectInputStream y delegando en el motor. Hoy el menu llega hasta la opcion 4.
-            opcion = consola.leerEntero("Opcion: ", 0, 4);
+            // TALLER ARCHIVOS (secciones 3 a 5): el menu ahora llega hasta la opcion 7 y
+            // delega en el motor las operaciones de archivos (ver log, cargar y borrar).
+            opcion = consola.leerEntero("Opcion: ", 0, 7);
             switch (opcion) {
                 case 1 -> motor.combateRapido();
                 case 2 -> motor.jugarTorneo();
                 case 3 -> motor.mostrarBestiario();
                 case 4 -> motor.batallaEnTablero();
+                case 5 -> {
+                    motor.informacionArchivos();
+                    motor.verHistorial();
+                }
+                case 6 -> motor.cargarProgreso();
+                case 7 -> borrarPartidaConConfirmacion(consola, motor);
                 default -> System.out.println("Hasta luego.");
             }
         } while (opcion != 0);
+    }
+
+    /** Seccion 4: la partida se borra solo con confirmacion explicita del jugador. */
+    private static void borrarPartidaConConfirmacion(Consola consola, MotorJuego motor) {
+        if (!motor.hayPartidaGuardada()) {
+            System.out.println("No hay ninguna partida guardada.");
+            return;
+        }
+        String respuesta = consola.leerLinea("Seguro que quieres borrar la partida? (escribe SI): ");
+        if (respuesta.equalsIgnoreCase("SI")) {
+            if (motor.borrarPartidaGuardada()) {
+                System.out.println("Partida borrada.");
+            } else {
+                System.out.println("No se pudo borrar la partida.");
+            }
+        } else {
+            System.out.println("Borrado cancelado.");
+        }
     }
 
     private static void mostrarMenu() {
@@ -41,6 +65,9 @@ public class Main {
         System.out.println("2. Torneo");
         System.out.println("3. Ver bestiario");
         System.out.println("4. Batalla en tablero");
+        System.out.println("5. Ver historial de combate (archivo)");
+        System.out.println("6. Cargar partida guardada");
+        System.out.println("7. Borrar partida guardada");
         System.out.println("0. Salir");
     }
 }

@@ -6,5 +6,7 @@ public enum Accion {
     ESPECIAL,
     POCION,
     ESTADO,
-    HUIR
+    HUIR,
+    /** El temporizador vencio antes de que el jugador eligiera: pierde el turno. */
+    TURNO_PERDIDO
 }
