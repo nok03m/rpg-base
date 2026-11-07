@@ -4,6 +4,7 @@ import com.rpg.entities.enums.TipoEfecto;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
 /** Efecto periodico (DoT o HoT): cambia la vida un valor fijo en cada tick durante cierta duracion. */
 // TALLER ARCHIVOS (seccion 5): Serializable; los efectos activos de Personaje y de Pocion lo referencian.
@@ -21,8 +22,19 @@ public class EstadoEfecto implements Serializable {
     private volatile int turnosRestantes;
 
     public EstadoEfecto(String nombre, TipoEfecto tipo, int valorPorTick, int duracion) {
+        // Validacion: un efecto sin nombre, sin tipo, con valor no positivo o sin duracion
+        // no tiene sentido y fallaba mas tarde (NPE en esDanio, bucles sin fin...).
+        if (nombre == null || nombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre del efecto no puede estar vacio");
+        }
+        if (valorPorTick <= 0) {
+            throw new IllegalArgumentException("El valor por tick debe ser positivo");
+        }
+        if (duracion <= 0) {
+            throw new IllegalArgumentException("La duracion del efecto debe ser positiva");
+        }
         this.nombre = nombre;
-        this.tipo = tipo;
+        this.tipo = Objects.requireNonNull(tipo, "El tipo de efecto no puede ser nulo");
         this.valorPorTick = valorPorTick;
         this.turnosRestantes = duracion;
     }

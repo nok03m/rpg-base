@@ -17,8 +17,8 @@ import com.rpg.entities.Personaje;
  *
  * Reglas del taller que cumple:
  * - while (!Thread.currentThread().isInterrupted()) en lugar de banderas manuales.
- * - Thread.sleep() dentro de try-catch de InterruptedException.
- * - En el catch: limpieza del estado, Thread.currentThread().interrupt() y break.
+ * - Thread.sleep() dentro de try-catch de InterruptedException, con el catch DENTRO del
+ *   bucle: limpia el estado, restaura la bandera y sale con break literal.
  * - Nunca Thread.stop() (deprecado y peligroso).
  */
 public class EfectoContinuoTask implements Runnable {
@@ -40,30 +40,35 @@ public class EfectoContinuoTask implements Runnable {
 
     @Override
     public void run() {
-        try {
-            while (!Thread.currentThread().isInterrupted()) {
+        while (!Thread.currentThread().isInterrupted()) {
+            // El try-catch va DENTRO del bucle, como pide la guia: el catch limpia el estado,
+            // restaura la bandera de interrupcion y sale del bucle con break literal.
+            try {
                 Thread.sleep(intervaloMs);
-                if (!objetivo.estaVivo()) {
-                    // El personaje cayo por otro motivo: el efecto ya no tiene sentido.
-                    registro.agregar("%s cayo: %s se disuelve", objetivo.getNombre(), efecto.getNombre());
-                    terminar();
-                    return;
+            } catch (InterruptedException e) {
+                // Cancelacion: antidoto, purificacion o fin del combate.
+                if (gestor.esPropietarioActual(this.efecto.getNombre())) {
+                    // Limpieza del estado del personaje (solo si este hilo aun posee el efecto;
+                    // si fue reaplicado, quien limpia es el hilo nuevo, nunca este).
+                    objetivo.quitarEfecto(efecto.getNombre());
+                    registro.agregar("%s: %s interrumpido", objetivo.getNombre(), efecto.getNombre());
                 }
-                aplicarTick();
-                efecto.consumirTurno();
-                if (efecto.haTerminado()) {
-                    registro.agregar("%s: termina %s", objetivo.getNombre(), efecto.getNombre());
-                    terminar();
-                    return;
-                }
+                Thread.currentThread().interrupt();
+                break;
             }
-        } catch (InterruptedException e) {
-            // Cancelacion: antidoto, purificacion o fin del combate.
-            // Limpieza del estado del personaje (no-op si el hilo principal ya lo quito),
-            // restauracion de la bandera de interrupcion y salida del bucle.
-            Thread.currentThread().interrupt();
-            objetivo.quitarEfecto(efecto.getNombre());
-            registro.agregar("%s: %s interrumpido", objetivo.getNombre(), efecto.getNombre());
+            if (!objetivo.estaVivo()) {
+                // El personaje cayo por otro motivo: el efecto ya no tiene sentido.
+                registro.agregar("%s cayo: %s se disuelve", objetivo.getNombre(), efecto.getNombre());
+                terminar();
+                return;
+            }
+            aplicarTick();
+            efecto.consumirTurno();
+            if (efecto.haTerminado()) {
+                registro.agregar("%s: termina %s", objetivo.getNombre(), efecto.getNombre());
+                terminar();
+                return;
+            }
         }
     }
 
@@ -81,6 +86,12 @@ public class EfectoContinuoTask implements Runnable {
 
     /** Fin natural del efecto: se olvida el hilo y se retira del personaje. */
     private void terminar() {
+        // Si el efecto fue REAPLICADO mientras este hilo terminaba, el registro del gestor
+        // ya apunta al hilo nuevo: este hilo viejo no debe tocar ni el registro ni el estado
+        // del personaje (antes podria borrar el efecto nuevo por tener el mismo nombre).
+        if (!gestor.esPropietarioActual(efecto.getNombre())) {
+            return;
+        }
         // 1) olvidar el hilo ANTES de tocar al personaje (fuera del candado del gestor
         //    no hay inversion de candados: personaje -> gestor).
         gestor.olvidarHilo(efecto.getNombre());

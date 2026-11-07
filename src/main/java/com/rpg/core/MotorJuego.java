@@ -341,10 +341,19 @@ public class MotorJuego {
         contenido.append(System.lineSeparator()).append("--- Ultimo combate ---").append(System.lineSeparator());
         contenido.append(registro.getTexto());
         ultimoGuardado = contenido.toString();
-        gestorArchivos.escribirLog(ultimoGuardado, true);
-        gestorArchivos.guardarPartida(new EstadoPartida(perfil, gremio, bestiario.derrotadosSnapshot()));
+        // El resultado de CADA operacion se comprueba: anunciar exito cuando algo fallo
+        // enganaria al jugador (disco lleno, permisos, objeto no serializable...).
+        boolean logOk = gestorArchivos.escribirLog(ultimoGuardado, true);
+        boolean partidaOk = gestorArchivos.guardarPartida(new EstadoPartida(perfil, gremio, bestiario.derrotadosSnapshot()));
         if (anunciar) {
-            System.out.println("[Progreso guardado en disco]");
+            if (logOk && partidaOk) {
+                System.out.println("[Progreso guardado en disco]");
+            } else if (logOk || partidaOk) {
+                System.out.println("[Progreso guardado PARCIALMENTE: log=" + (logOk ? "ok" : "fallo")
+                        + ", partida=" + (partidaOk ? "ok" : "fallo") + "]");
+            } else {
+                System.out.println("[No se pudo guardar el progreso]");
+            }
         }
     }
 

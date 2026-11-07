@@ -15,6 +15,10 @@ public class Main {
             ejecutarMenu(consola, motor);
         } catch (NoSuchElementException e) {
             System.out.println("\nEntrada finalizada. Hasta luego.");
+        } catch (IllegalStateException e) {
+            // Scanner cerrado antes de tiempo, o torneo interrumpido: mensaje limpio en
+            // vez de traza, y el juego termina de forma ordenada (el daemon es demonio).
+            System.out.println("\nEl juego se cerro: " + e.getMessage());
         }
     }
 

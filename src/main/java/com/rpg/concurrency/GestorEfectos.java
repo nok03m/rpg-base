@@ -86,6 +86,17 @@ public class GestorEfectos implements OyenteEfectos {
         }
     }
 
+    /**
+     * @return true si el hilo QUE LLAMA es el propietario registrado del efecto con ese
+     * nombre. Evita que un hilo viejo (interrumpido por una reaplicacion) borre el
+     * efecto NUEVO solo porque comparte nombre: la limpieza solo la hace el duenio actual.
+     */
+    public boolean esPropietarioActual(String nombreEfecto) {
+        synchronized (this) {
+            return hilos.get(nombreEfecto) == Thread.currentThread();
+        }
+    }
+
     private synchronized Thread tomarYOlvidar(String nombreEfecto) {
         return hilos.remove(nombreEfecto);
     }

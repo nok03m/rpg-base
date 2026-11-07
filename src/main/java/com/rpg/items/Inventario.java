@@ -29,6 +29,11 @@ public class Inventario<T> implements Iterable<T>, Serializable {
     }
 
     public void agregar(T elemento) throws CapacidadExcedidaException {
+        // Rechazar null AQUI: un elemento nulo dentro de la coleccion explota mucho
+        // despues (al usarlo o al serializar), lejos del punto donde se introdujo.
+        if (elemento == null) {
+            throw new IllegalArgumentException("No se puede agregar un elemento nulo al inventario");
+        }
         if (elementos.size() >= capacidad) {
             throw new CapacidadExcedidaException(capacidad);
         }
