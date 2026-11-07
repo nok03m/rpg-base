@@ -54,7 +54,11 @@ public class PruebaApagadoBrusco {
     // ---- modo padre: matar la JVM durante el guardado y auditar el .dat ------------
 
     private static void modoPadre() throws Exception {
-        String classpath = System.getProperty("java.class.path");
+        // CLASSPATH ABSOLUTO obligatorio: el subproceso corre con carpeta de trabajo
+        // temporal, asi que un classpath relativo ("out") no resolveria ahi y el
+        // subproceso moriria con ClassNotFoundException antes de guardar nada.
+        String classpath = java.nio.file.Paths.get(System.getProperty("java.class.path"))
+                .toAbsolutePath().normalize().toString();
         Path carpeta = Files.createTempDirectory("apagado-brusco");
         System.out.println("Carpeta de trabajo del subproceso: " + carpeta);
 
