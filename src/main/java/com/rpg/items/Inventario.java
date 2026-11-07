@@ -3,6 +3,7 @@ package com.rpg.items;
 import com.rpg.exceptions.CapacidadExcedidaException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
@@ -41,6 +42,11 @@ public class Inventario<T> implements Iterable<T> {
 
     public boolean estaVacio() {
         return elementos.isEmpty();
+    }
+
+    /** Vista de solo lectura de los elementos guardados. */
+    public List<T> getItems() {
+        return Collections.unmodifiableList(elementos);
     }
 
     @Override
