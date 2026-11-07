@@ -9,16 +9,23 @@ import java.util.Scanner;
 public class Main {
 
     public static void main(String[] args) {
+        MotorJuego motor = null;
         try (Scanner scanner = new Scanner(System.in)) {
             Consola consola = new Consola(scanner);
-            MotorJuego motor = new MotorJuego(consola);
+            motor = new MotorJuego(consola);
             ejecutarMenu(consola, motor);
         } catch (NoSuchElementException e) {
             System.out.println("\nEntrada finalizada. Hasta luego.");
         } catch (IllegalStateException e) {
             // Scanner cerrado antes de tiempo, o torneo interrumpido: mensaje limpio en
-            // vez de traza, y el juego termina de forma ordenada (el daemon es demonio).
+            // vez de traza, y el juego termina de forma ordenada.
             System.out.println("\nEl juego se cerro: " + e.getMessage());
+        } finally {
+            // Apagado ordenado del autoguardado: el demonio sale por su catch de
+            // InterruptedException en vez de esperar el aborto brusco de la JVM.
+            if (motor != null) {
+                motor.detenerAutoguardado();
+            }
         }
     }
 

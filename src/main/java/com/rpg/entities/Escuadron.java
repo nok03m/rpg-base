@@ -12,6 +12,10 @@ public class Escuadron implements Iterable<Personaje> {
     private final List<Personaje> miembros = new ArrayList<>();
 
     public Escuadron(String nombre) {
+        // Validacion homogenea con el resto del modelo (Pocion, Arma, EstadoEfecto, Gremio).
+        if (nombre == null || nombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre del escuadron no puede estar vacio");
+        }
         this.nombre = nombre;
     }
 

@@ -61,9 +61,16 @@ public class GestorArchivos {
      * SOLO se aceptan clases del propio proyecto (com.rpg.**) y del JDK (java.base).
      * Cualquier otra clase del classpath queda bloqueada con InvalidClassException, lo que
      * cierra la puerta a gadget chains aunque alguien sustituya el .dat.
+     *
+     * Ademas de las clases, el filtro pone TECHO a los recursos que puede consumir un .dat
+     * manipulado (un archivo con clases permitidas igual podria explotar en memoria):
+     * - maxdepth=32 : profundidad maxima del grafo de objetos anidados.
+     * - maxrefs=4096: maximo de objetos referenciados en una sola lectura.
+     * - maxbytes=4M : bytes totales que puede consumir la deserializacion.
+     * - maxarray=16384: tamanio maximo de cualquier array reconstruido.
      */
-    private static final ObjectInputFilter FILTRO_SEGURO =
-            ObjectInputFilter.Config.createFilter("com.rpg.**;java.base/*;!*");
+    private static final ObjectInputFilter FILTRO_SEGURO = ObjectInputFilter.Config.createFilter(
+            "com.rpg.**;java.base/*;maxdepth=32;maxrefs=4096;maxbytes=4194304;maxarray=16384;!*");
     /** Tamano maximo del log antes de rotarlo (empezar de cero) en el proximo guardado. */
     private static final long LIMITE_LOG_BYTES = 256 * 1024;
 
@@ -199,25 +206,54 @@ public class GestorArchivos {
 
     /**
      * Seccion 5: carga la partida con ObjectInputStream.readObject() y cast al tipo correcto.
-     * Orden de los catch: FileNotFoundException (mas especifica) -> ClassNotFoundException
-     * (el .dat menciona una clase que ya no existe en el proyecto) -> IOException
-     * (archivo corrupto o ilegible). Con cualquier problema devuelve null y el juego sigue.
+     * Si el .dat no se puede leer (corrupto, tipo ajeno bloqueado por el filtro...), se
+     * intenta RECUPERAR automaticamente desde el respaldo .bak que deja cada guardado
+     * exitoso: perder el archivo actual no tiene por que costar la partida.
      */
     public synchronized EstadoPartida cargarPartida() {
-        try (ObjectInputStream entrada = new ObjectInputStream(new FileInputStream(ARCHIVO_PARTIDA))) {
-            // El filtro bloquea toda clase fuera de com.rpg y del JDK: un .dat manipulado
-            // con clases ajenas falla aqui con InvalidClassException (una IOException).
-            entrada.setObjectInputFilter(FILTRO_SEGURO);
-            Object objeto = entrada.readObject();
-            return (EstadoPartida) objeto;
+        EstadoPartida cargada = cargarDesde(ARCHIVO_PARTIDA);
+        if (cargada == null && existeRespaldo()) {
+            System.out.println("Intentando recuperar la copia de respaldo (.bak)...");
+            cargada = cargarDesde(ARCHIVO_PARTIDA_BAK);
+            if (cargada != null) {
+                System.out.println("Partida recuperada desde el respaldo .bak.");
+            }
+        }
+        return cargada;
+    }
+
+    /**
+     * Lee un archivo de partida concreto. IMPORTANTE para la portabilidad: el
+     * FileInputStream es un recurso PROPIO del try externo y el ObjectInputStream del
+     * try interno. Si el constructor de ObjectInputStream falla (cabecera corrupta ->
+     * StreamCorruptedException), el JLS 14.20.3 NO cierra el recurso cuyo inicializador
+     * lanzo... pero SI cierra el del try externo ya inicializado. Con la version anidada
+     * anterior, new ObjectInputStream(new FileInputStream(...)) fugaba el descriptor:
+     * en Windows eso deja el .dat bloqueado (sin FILE_SHARE_DELETE) contra move/delete
+     * durante el resto de la ejecucion.
+     * Orden de los catch: FileNotFoundException (mas especifica) -> ClassNotFoundException
+     * (el archivo menciona una clase que ya no existe) -> ClassCastException (serializacion
+     * valida de otro tipo) -> IOException (corrupto, filtro rechazando, ilegible).
+     */
+    private EstadoPartida cargarDesde(String ruta) {
+        try (FileInputStream flujo = new FileInputStream(ruta)) {
+            try (ObjectInputStream entrada = new ObjectInputStream(flujo)) {
+                // El filtro bloquea toda clase fuera de com.rpg y del JDK: un archivo
+                // manipulado con clases ajenas falla aqui con InvalidClassException.
+                entrada.setObjectInputFilter(FILTRO_SEGURO);
+                Object objeto = entrada.readObject();
+                return (EstadoPartida) objeto;
+            }
         } catch (FileNotFoundException e) {
-            System.out.println("Todavia no hay partida guardada: " + e.getMessage());
+            if (ruta.equals(ARCHIVO_PARTIDA)) {
+                System.out.println("Todavia no hay partida guardada: " + e.getMessage());
+            }
             return null;
         } catch (ClassNotFoundException e) {
             System.out.println("El archivo pertenece a una version antigua del juego: " + e.getMessage());
             return null;
         } catch (ClassCastException e) {
-            // El .dat es una serializacion VALIDA pero de otro tipo de objeto (no EstadoPartida).
+            // El archivo es una serializacion VALIDA pero de otro tipo (no EstadoPartida).
             System.out.println("El archivo guardado no es una partida de este juego: " + e.getMessage());
             return null;
         } catch (IOException e) {
@@ -247,7 +283,18 @@ public class GestorArchivos {
             // File.delete() ya intento el borrado; si NIO tambien falla, se explica el motivo.
             System.out.println("Files.deleteIfExists informo: " + e.getMessage());
         }
-        return borrado;
+        // Privacidad (borrado completo): el jugador pide eliminar LA PARTIDA, no solo el
+        // .dat. Si el respaldo .bak sobreviviera, el estado seguiria recuperable aunque
+        // el usuario crea haberlo perdido; el .tmp seria un resto de un guardado fallido.
+        boolean sinRespaldo = borrarSiExiste(ARCHIVO_PARTIDA_BAK);
+        boolean sinTemporal = borrarSiExiste(ARCHIVO_PARTIDA_TMP);
+        return borrado && sinRespaldo && sinTemporal;
+    }
+
+    /** @return true si el archivo ya no existe (borrado ok o nunca existio). */
+    private static boolean borrarSiExiste(String ruta) {
+        File f = new File(ruta);
+        return !f.exists() || f.delete();
     }
 
     /** Variante NIO pura (la usa la prueba automatica). @return true si borro un archivo que existia */

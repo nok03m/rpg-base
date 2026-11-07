@@ -43,6 +43,9 @@ public class MotorJuego {
     private final TorneoManager torneo = new TorneoManager(arena, registro);
     private final BatallaTablero batallaTablero;
     private final GestorArchivos gestorArchivos = new GestorArchivos();
+    // Referencia al hilo demonio de autoguardado: permite un apagado ORDENADO
+    // (interrupt) desde Main, ademas del aborto implicito que hace la JVM al salir.
+    private final Thread hiloAutoguardado;
     // TALLER ARCHIVOS (seccion 5): ultimoGuardado sigue siendo la copia en memoria del estado;
     // ahora guardarProgreso ademas la vuelca a disco (log .txt) y serializa la partida (.dat).
     private String ultimoGuardado = "";
@@ -60,7 +63,17 @@ public class MotorJuego {
         // TALLER CONCURRENCIA (seccion 4): hilo demonio de auto-guardado. setDaemon(true) se
         // llama dentro del constructor, ANTES de start(); la JVM no espera a los demonios al
         // cerrar, asi que la aplicacion sale de inmediato aunque este bucle while (true) siga vivo.
-        new AutoGuardadoDaemon(this, intervaloAutoguardadoMs).start();
+        hiloAutoguardado = new AutoGuardadoDaemon(this, intervaloAutoguardadoMs);
+        hiloAutoguardado.start();
+    }
+
+    /**
+     * Apagado ordenado del autoguardado (buena practica: nunca depender solo del aborto
+     * de la JVM). Interrumpe el bucle del demonio, que sale limpio por su catch de
+     * InterruptedException. Lo llama Main al cerrar el juego.
+     */
+    public void detenerAutoguardado() {
+        hiloAutoguardado.interrupt();
     }
 
     // ---- opciones del menu principal
@@ -84,6 +97,11 @@ public class MotorJuego {
             // (veneno, quemadura, regeneracion...). El finally garantiza que no queden
             // hilos sueltos ni huya el jugador, ni gane, ni caiga.
             gestorEfectos.detenerTodo();
+            // Limpieza residual: con el registro del gestor vacio, ningun hilo interrumpido
+            // va a retirar su propio efecto del personaje; si quedara alguno activo, el
+            // autoguardado lo persistiria sin hilo asociado (al cargar no se recrea tarea).
+            jugador.limpiarEfectos();
+            enemigo.limpiarEfectos();
             jugador.setOyenteEfectos(null);
             enemigo.setOyenteEfectos(null);
         }

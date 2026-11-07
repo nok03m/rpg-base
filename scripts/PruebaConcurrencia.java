@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *  6-7. El temporizador de turno expira (callback) o se cancela a tiempo (interrupt).
  *  8. El torneo con semifinales paralelas y join() corona un campeon.
  *  9. El AutoGuardadoDaemon guarda periodicamente en memoria.
+ * 10. La reaplicacion del mismo efecto: el hilo viejo NO borra el nuevo.
+ * 11. El cierre del combate (detenerTodo + limpiarEfectos) no deja efectos residuales.
  * Ejecutar: java PruebaConcurrencia
  */
 public class PruebaConcurrencia {
@@ -155,6 +157,24 @@ public class PruebaConcurrencia {
         Thread.sleep(200);
         check("Reaplicacion: el antidoto limpia el efecto vigente",
                 envenenadoDosVeces.getEfectos().isEmpty() && !gestor.hayHilosActivos());
+
+        // ---- 11. cierre de combate: detenerTodo + limpiarEfectos sin efectos residuales
+        // Igual que el finally de MotorJuego.combateRapido: tras detenerTodo los hilos
+        // interrumpidos ya no retiran su efecto del personaje (el registro quedo vacio),
+        // asi que sin la limpieza residual el autoguardado persistiria efectos activos
+        // sin hilo asociado.
+        Enemigo combateCerrado = new Enemigo("CombateCerrado", 200, 0, 0);
+        combateCerrado.setOyenteEfectos(gestor);
+        combateCerrado.aplicarEfecto(new EstadoEfecto("Veneno", TipoEfecto.DANIO_CONTINUO, 5, 99));
+        combateCerrado.aplicarEfecto(new EstadoEfecto("Regeneracion", TipoEfecto.CURACION_CONTINUA, 5, 99));
+        Thread.sleep(80);
+        gestor.detenerTodo();
+        combateCerrado.limpiarEfectos();
+        Thread.sleep(200);   // margen para que los hilos interrumpidos terminen su limpieza
+        check("Cierre de combate: detenerTodo + limpiarEfectos deja 0 efectos en el personaje",
+                combateCerrado.getEfectos().isEmpty());
+        check("Cierre de combate: no quedan hilos de efectos activos",
+                !gestor.hayHilosActivos());
 
         System.out.println();
         if (fallos == 0) {

@@ -46,10 +46,11 @@ public class EfectoContinuoTask implements Runnable {
             try {
                 Thread.sleep(intervaloMs);
             } catch (InterruptedException e) {
-                // Cancelacion: antidoto, purificacion o fin del combate.
-                if (gestor.esPropietarioActual(this.efecto.getNombre())) {
-                    // Limpieza del estado del personaje (solo si este hilo aun posee el efecto;
-                    // si fue reaplicado, quien limpia es el hilo nuevo, nunca este).
+                // Cancelacion: antidoto, purificacion o fin del combate. La comprobacion de
+                // propiedad y el olvido del registro son UNA sola operacion atomica: si el
+                // efecto fue reaplicado (el registro apunta al hilo nuevo), esta llamada
+                // devuelve false y este hilo viejo NO toca el estado del personaje.
+                if (gestor.olvidarSiPropietario(this.efecto.getNombre(), Thread.currentThread())) {
                     objetivo.quitarEfecto(efecto.getNombre());
                     registro.agregar("%s: %s interrumpido", objetivo.getNombre(), efecto.getNombre());
                 }
@@ -87,16 +88,17 @@ public class EfectoContinuoTask implements Runnable {
     /** Fin natural del efecto: se olvida el hilo y se retira del personaje. */
     private void terminar() {
         // Si el efecto fue REAPLICADO mientras este hilo terminaba, el registro del gestor
-        // ya apunta al hilo nuevo: este hilo viejo no debe tocar ni el registro ni el estado
-        // del personaje (antes podria borrar el efecto nuevo por tener el mismo nombre).
-        if (!gestor.esPropietarioActual(efecto.getNombre())) {
+        // ya apunta al hilo nuevo. olvidarSiPropietario compara y elimina ATOMICAMENTE:
+        // devuelve false si no somos duenos y en ese caso este hilo viejo no debe tocar
+        // ni el registro ni el estado del personaje (antes podria borrar el efecto nuevo
+        // por tener el mismo nombre).
+        if (!gestor.olvidarSiPropietario(efecto.getNombre(), Thread.currentThread())) {
             return;
         }
-        // 1) olvidar el hilo ANTES de tocar al personaje (fuera del candado del gestor
-        //    no hay inversion de candados: personaje -> gestor).
-        gestor.olvidarHilo(efecto.getNombre());
-        // 2) quitarEfecto avisa al oyente; como el hilo ya no esta en el mapa, no se
-        //    interrumpe a si mismo.
+        // El hilo ya quedo fuera del registro (fuera del candado del gestor no hay
+        // inversion de candados: personaje -> gestor).
+        // quitarEfecto avisa al oyente; como el hilo ya no esta en el mapa, no se
+        // interrumpe a si mismo.
         objetivo.quitarEfecto(efecto.getNombre());
     }
 }

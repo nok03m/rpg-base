@@ -67,6 +67,23 @@ public class GestorEfectos implements OyenteEfectos {
         tomarYOlvidar(nombreEfecto);
     }
 
+    /**
+     * Operacion ATOMICA de propiedad: solo si el hilo que llama sigue siendo el duenio
+     * registrado del efecto, lo quita del registro y confirma. {@code Map.remove(clave,
+     * valor)} compara y elimina bajo el mismo monitor del gestor, sin ventana entre la
+     * comprobacion y la eliminacion: si otro hilo reaplico el efecto justo antes, el
+     * registro ya apunta al hilo NUEVO y esta llamada devuelve false sin tocar nada.
+     * (Antes eran dos llamadas separadas, esPropietarioActual + olvidarHilo, y entre
+     * ambas podia colarse una reaplicacion que el hilo viejo habria borrado por error.)
+     *
+     * @return true si este hilo era el propietario y quedo olvidado del registro
+     */
+    public boolean olvidarSiPropietario(String nombreEfecto, Thread hilo) {
+        synchronized (this) {
+            return hilos.remove(nombreEfecto, hilo);
+        }
+    }
+
     // ---- fin de combate
 
     /** Interrumpe todos los hilos de efectos activos (fin del combate). */

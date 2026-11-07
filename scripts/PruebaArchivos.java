@@ -43,7 +43,10 @@ public class PruebaArchivos {
         File log = new File(GestorArchivos.ARCHIVO_LOG);
         verificar("mkdirs creo la carpeta partidas/", carpeta.isDirectory());
         verificar("createNewFile dejo el registro vacio listo", log.exists() && log.length() == 0);
-        verificar("getAbsolutePath resuelve la ruta relativa", log.getAbsolutePath().endsWith("rpg-base/partidas/registro_combate.txt"));
+        // Portable: getAbsolutePath() usa el separador del SO (\ en Windows, / en Linux).
+        // Se normaliza a / antes de comparar para que la asercion valga en ambos sistemas.
+        verificar("getAbsolutePath resuelve la ruta relativa (portable, separadores del SO)",
+                log.getAbsolutePath().replace('\\', '/').endsWith("partidas/registro_combate.txt"));
 
         // ---- Seccion 2: escritura con BufferedWriter + FileWriter
         String bloque1 = "=== COMBATE 1 ===\nHeroe vs Goblin\nVictoria!";
@@ -145,12 +148,28 @@ public class PruebaArchivos {
         }
         verificar("el filtro de deserializacion bloquea clases ajenas (Intruso)", gestor.cargarPartida() == null);
 
+        // ---- Endurecimiento: el filtro tambien pone TECHO a los recursos (maxarray).
+        // byte[] es de java.base (permitido por clase), pero 20000 elementos superan el
+        // maxarray=16384 del filtro: la deserializacion se rechaza igual. En este punto
+        // todavia no hay .bak, asi que no hay respaldo que enmascare el rechazo.
+        try (ObjectOutputStream salida = new ObjectOutputStream(new FileOutputStream(GestorArchivos.ARCHIVO_PARTIDA))) {
+            salida.writeObject(new byte[20000]);
+        }
+        verificar("el filtro pone techo a los recursos (array mayor que maxarray rechazado)", gestor.cargarPartida() == null);
+
         // ---- Endurecimiento: guardado atomico con respaldo .bak (y sin .tmp sobrante)
-        gestor.guardarPartida(estado);
+        gestor.guardarPartida(estado);   // 1a: el .dat anterior (basura) pasa al .bak
+        gestor.guardarPartida(estado);   // 2a: el .bak ya contiene un estado VALIDO
         verificar("guardado atomico: .dat cargable, respaldo .bak presente y sin .tmp",
                 gestor.existeRespaldo()
                         && !new File(GestorArchivos.ARCHIVO_PARTIDA_TMP).exists()
                         && gestor.cargarPartida() != null);
+
+        // ---- Endurecimiento: recuperacion automatica desde el respaldo .bak
+        Files.write(Path.of(GestorArchivos.ARCHIVO_PARTIDA), new byte[]{9, 9, 9, 9, 9, 9, 9, 9});
+        EstadoPartida recuperada = gestor.cargarPartida();   // .dat corrupto -> carga el .bak
+        verificar("carga con .dat corrupto se recupera sola desde el respaldo .bak",
+                recuperada != null && recuperada.getPerfil().getVictorias() == 3);
 
         // ---- Endurecimiento: validacion de constructores del modelo
         boolean pocionOk = false;
@@ -182,13 +201,22 @@ public class PruebaArchivos {
         gestor.guardarPartida(estado);
         verificar("Files.deleteIfExists devuelve true cuando el archivo existia", gestor.borrarConNio());
 
+        // ---- Endurecimiento: borrado COMPLETO (privacidad): borrarPartida elimina el .dat,
+        // el respaldo .bak y cualquier .tmp residual en una sola llamada.
+        gestor.guardarPartida(estado);   // deja .dat y .bak
+        verificar("borrarPartida elimina .dat, respaldo .bak y .tmp de una vez",
+                gestor.borrarPartida()
+                        && !new File(GestorArchivos.ARCHIVO_PARTIDA).exists()
+                        && !new File(GestorArchivos.ARCHIVO_PARTIDA_BAK).exists()
+                        && !new File(GestorArchivos.ARCHIVO_PARTIDA_TMP).exists());
+
         System.out.printf("%nRESULTADO: %d/%d VERIFICACIONES OK%n", pruebasOk, TOTAL);
         if (pruebasOk != TOTAL) {
             System.exit(1);
         }
     }
 
-    private static final int TOTAL = 28;
+    private static final int TOTAL = 31;
 
     /** Clase Serializable AJENA al juego (fuera de com.rpg y del JDK): el filtro debe rechazarla. */
     private static final class Intruso implements java.io.Serializable {

@@ -19,6 +19,11 @@ public class Gremio implements Serializable {
     private final List<Personaje> miembros = new ArrayList<>();
 
     public Gremio(String nombre) {
+        // Validacion homogenea con el resto del modelo (Pocion, Arma, EstadoEfecto):
+        // un gremio sin nombre romperia los reportes y el menu de guardado.
+        if (nombre == null || nombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre del gremio no puede estar vacio");
+        }
         this.nombre = nombre;
     }
 

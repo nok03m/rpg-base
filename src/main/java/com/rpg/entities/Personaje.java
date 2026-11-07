@@ -290,6 +290,25 @@ public abstract class Personaje implements ICombatiente, Serializable {
     }
 
     /**
+     * Limpieza al CERRAR el combate: retira TODOS los efectos (DoT y HoT) que quedaran
+     * en el personaje. Se llama despues de GestorEfectos.detenerTodo(): los hilos quedaron
+     * interrumpidos y fuera del registro, asi que ninguno va a retirar su propio efecto,
+     * y si el personaje entrara al autoguardado se persistiria un efecto activo sin hilo
+     * que lo procese (al cargar, el oyente es transient y no se recrean las tareas).
+     * quitarEfecto avisa al oyente de cada retiro, pero como el registro del gestor ya
+     * esta vacio, nadie se interrumpe ni se borra dos veces.
+     */
+    public void limpiarEfectos() {
+        List<String> nombres;
+        synchronized (this) {
+            nombres = new ArrayList<>(efectos.keySet());
+        }
+        for (String nombreEfecto : nombres) {
+            quitarEfecto(nombreEfecto);
+        }
+    }
+
+    /**
      * REEMPLAZADO POR HILOS: antes este metodo aplicaba un tick de cada efecto turno a
      * turno desde Arena.iniciarTurno / BatallaTablero. Desde el taller de concurrencia
      * cada efecto tiene su propio hilo (EfectoContinuoTask) que aplica ticks cada cierto
