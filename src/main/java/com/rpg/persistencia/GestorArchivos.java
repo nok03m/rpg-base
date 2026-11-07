@@ -13,6 +13,7 @@ import java.io.NotSerializableException;
 import java.io.ObjectInputFilter;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -194,8 +195,18 @@ public class GestorArchivos {
                 Files.copy(Path.of(ARCHIVO_PARTIDA), Path.of(ARCHIVO_PARTIDA_BAK),
                         StandardCopyOption.REPLACE_EXISTING);
             }
-            Files.move(Path.of(ARCHIVO_PARTIDA_TMP), Path.of(ARCHIVO_PARTIDA),
-                    StandardCopyOption.REPLACE_EXISTING);
+            try {
+                // ATOMIC_MOVE fuerza el contrato atomico: el reemplazo ocurre COMPLETO o
+                // no ocurre, nunca se ve un .dat a medias ni desde otro proceso.
+                Files.move(Path.of(ARCHIVO_PARTIDA_TMP), Path.of(ARCHIVO_PARTIDA),
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                // Algunos sistemas de archivos no lo soportan (redes, FAT...): reemplazo
+                // normal, que en la practica sigue siendo atomico al ser dentro del
+                // MISMO directorio (mismo volumen).
+                Files.move(Path.of(ARCHIVO_PARTIDA_TMP), Path.of(ARCHIVO_PARTIDA),
+                        StandardCopyOption.REPLACE_EXISTING);
+            }
             return true;
         } catch (IOException e) {
             new File(ARCHIVO_PARTIDA_TMP).delete();

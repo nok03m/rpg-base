@@ -25,8 +25,13 @@ public class PerfilJugador implements Serializable {
         derrotas++;
     }
 
-    /** @return true si el logro era nuevo; false si ya estaba desbloqueado */
+    /** @return true si el logro era nuevo; false si ya estaba desbloqueado o es invalido */
     public boolean desbloquearLogro(String logro) {
+        // Validacion homogenea con el resto del modelo (Pocion, Arma, Gremio, Escuadron):
+        // TreeSet.add(null) lanzaria NPE sin control, y un logro en blanco no es logro.
+        if (logro == null || logro.isBlank()) {
+            return false;
+        }
         return logros.add(logro);
     }
 

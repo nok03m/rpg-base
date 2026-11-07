@@ -194,6 +194,13 @@ public class PruebaArchivos {
         }
         verificar("Inventario.agregar(null) lanza IllegalArgumentException", inventarioOk);
 
+        // ---- Endurecimiento: PerfilJugador homogeneo con el resto del modelo
+        PerfilJugador perfilLogros = new PerfilJugador();
+        verificar("PerfilJugador ignora logros nulos o vacios (sin NPE del TreeSet)",
+                !perfilLogros.desbloquearLogro(null)
+                        && !perfilLogros.desbloquearLogro("   ")
+                        && perfilLogros.getLogros().isEmpty());
+
         // ---- Seccion 4: borrado con File.delete() y Files.deleteIfExists()
         gestor.guardarPartida(estado);
         verificar("File.delete() borra y devuelve true", new File(GestorArchivos.ARCHIVO_PARTIDA).delete());
@@ -216,7 +223,7 @@ public class PruebaArchivos {
         }
     }
 
-    private static final int TOTAL = 31;
+    private static final int TOTAL = 32;
 
     /** Clase Serializable AJENA al juego (fuera de com.rpg y del JDK): el filtro debe rechazarla. */
     private static final class Intruso implements java.io.Serializable {
