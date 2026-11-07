@@ -1,5 +1,7 @@
 package co.edu.puj.rpg.modelo;
 
+import co.edu.puj.rpg.modelo.enemigo.Enemigo;
+
 /**
  * Heroe del simulador de batalla. Todos sus atributos son private: el estado
  * interno solo puede leerse o modificarse a traves de la API publica de la clase.
@@ -37,5 +39,82 @@ public class Personaje {
 
     public Personaje(String nombre) {
         this(nombre, VIDA_BASE, ATAQUE_BASE, ORO_INICIAL);
+    }
+
+    // ---- API publica de comportamiento
+
+    public void atacar(Enemigo enemigo) {
+        enemigo.recibirDano(this.puntosAtaque);
+    }
+
+    public void usarPocion(int cantidadRestaurada) {
+        setPuntosVida(this.puntosVida + cantidadRestaurada);
+    }
+
+    public void recibirDano(int cantidadDano) {
+        if (cantidadDano < 0) {
+            return;
+        }
+        setPuntosVida(this.puntosVida - cantidadDano);
+    }
+
+    // ---- setters validados
+
+    public void setPuntosVida(int vida) {
+        if (vida <= 0) {
+            this.puntosVida = 0;
+            this.estaVivo = false;
+        } else if (vida > this.vidaMaxima) {
+            this.puntosVida = this.vidaMaxima;
+            this.estaVivo = true;
+        } else {
+            this.puntosVida = vida;
+            this.estaVivo = true;
+        }
+    }
+
+    /** @return true si la operacion fue aceptada; false si el saldo seria insuficiente */
+    public boolean setOro(double oro) {
+        if (oro < 0.0) {
+            return false;
+        }
+        this.oro = oro;
+        return true;
+    }
+
+    protected void setNivel(int nivel) {
+        if (nivel >= 1) {
+            this.nivel = nivel;
+        }
+    }
+
+    // ---- getters
+
+    public String getNombre() {
+        return this.nombre;
+    }
+
+    public int getPuntosVida() {
+        return this.puntosVida;
+    }
+
+    public int getVidaMaxima() {
+        return this.vidaMaxima;
+    }
+
+    public int getPuntosAtaque() {
+        return this.puntosAtaque;
+    }
+
+    public int getNivel() {
+        return this.nivel;
+    }
+
+    public double getOro() {
+        return this.oro;
+    }
+
+    public boolean isEstaVivo() {
+        return this.estaVivo;
     }
 }

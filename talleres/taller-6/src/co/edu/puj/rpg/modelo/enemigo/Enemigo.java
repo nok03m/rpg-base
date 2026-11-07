@@ -1,5 +1,7 @@
 package co.edu.puj.rpg.modelo.enemigo;
 
+import co.edu.puj.rpg.modelo.Personaje;
+
 /**
  * Entidad rival del heroe, en un subpaquete propio para evidenciar las barreras
  * de acceso entre paquetes. Replica la estructura de atributos privados.
@@ -37,5 +39,63 @@ public class Enemigo {
 
     public Enemigo(String nombre) {
         this(nombre, VIDA_BASE, ATAQUE_BASE, ORO_BASE);
+    }
+
+    // ---- API publica de comportamiento
+
+    public void atacar(Personaje objetivo) {
+        objetivo.recibirDano(this.puntosAtaque);
+    }
+
+    public void recibirDano(int cantidadDano) {
+        if (cantidadDano < 0) {
+            return;
+        }
+        setPuntosVida(this.puntosVida - cantidadDano);
+    }
+
+    // ---- setter validado
+
+    public void setPuntosVida(int vida) {
+        if (vida <= 0) {
+            this.puntosVida = 0;
+            this.estaVivo = false;
+        } else if (vida > this.vidaMaxima) {
+            this.puntosVida = this.vidaMaxima;
+            this.estaVivo = true;
+        } else {
+            this.puntosVida = vida;
+            this.estaVivo = true;
+        }
+    }
+
+    // ---- getters
+
+    public String getNombre() {
+        return this.nombre;
+    }
+
+    public int getPuntosVida() {
+        return this.puntosVida;
+    }
+
+    public int getVidaMaxima() {
+        return this.vidaMaxima;
+    }
+
+    public int getPuntosAtaque() {
+        return this.puntosAtaque;
+    }
+
+    public int getNivel() {
+        return this.nivel;
+    }
+
+    public double getOro() {
+        return this.oro;
+    }
+
+    public boolean isEstaVivo() {
+        return this.estaVivo;
     }
 }
