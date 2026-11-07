@@ -29,12 +29,14 @@ public class MotorJuego {
     private final PerfilJugador perfil = new PerfilJugador();
     private final Gremio gremio = new Gremio(NOMBRE_GREMIO);
     private final TorneoManager torneo = new TorneoManager(arena, registro);
+    private final BatallaTablero batallaTablero;
     // TALLER ARCHIVOS: ultimoGuardado es solo el estado de la partida en memoria. Aqui (o en un metodo
     // nuevo como cargarProgreso) iria la carga de una partida guardada en disco; llamala desde Main.
     private String ultimoGuardado = "";
 
     public MotorJuego(Consola consola) {
         this.consola = consola;
+        this.batallaTablero = new BatallaTablero(consola, registro);
     }
 
     // ---- opciones del menu principal
@@ -64,6 +66,12 @@ public class MotorJuego {
         System.out.print(bestiario.describir());
         System.out.printf("Victorias: %d | Derrotas: %d | Logros: %s%n",
                 perfil.getVictorias(), perfil.getDerrotas(), perfil.getLogros());
+    }
+
+    public void batallaEnTablero() {
+        registro.limpiar();
+        batallaTablero.jugar();
+        guardarProgreso();
     }
 
     // ---- creacion de personajes
