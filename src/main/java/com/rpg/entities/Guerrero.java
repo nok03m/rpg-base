@@ -17,11 +17,15 @@ public class Guerrero extends Personaje {
     private final int fuerzaEscudo;
 
     public Guerrero(String nombre) {
-        this(nombre, FUERZA_ESCUDO_INICIAL);
+        this(nombre, FUERZA_ESCUDO_INICIAL, 0, 0);
     }
 
     public Guerrero(String nombre, int fuerzaEscudo) {
-        super(nombre, TipoPersonaje.GUERRERO, VIDA, ATAQUE, DEFENSA);
+        this(nombre, fuerzaEscudo, 0, 0);
+    }
+
+    public Guerrero(String nombre, int fuerzaEscudo, int posicionX, int posicionY) {
+        super(nombre, TipoPersonaje.GUERRERO, VIDA, ATAQUE, DEFENSA, posicionX, posicionY);
         this.fuerzaEscudo = fuerzaEscudo;
         aprenderHabilidad(NOMBRE_ESPECIAL);
         equiparArma(new Arma("Espada de Hierro", 6, RaridadItem.COMUN));
@@ -43,5 +47,24 @@ public class Guerrero extends Personaje {
         objetivo.defender(calcularDanio() * MULTIPLICADOR_ESPECIAL);
         return String.format("%s usa %s (-%d de vida propia) y causa %d de dano a %s",
                 getNombre(), NOMBRE_ESPECIAL, COSTO_VIDA_ESPECIAL, vidaAntes - objetivo.getVida(), objetivo.getNombre());
+    }
+
+    /** Ataque comun con el arma equipada. */
+    public String atacar(Personaje objetivo) {
+        int vidaAntes = objetivo.getVida();
+        objetivo.defender(calcularDanio());
+        return String.format("%s ataca a %s y causa %d de dano",
+                getNombre(), objetivo.getNombre(), vidaAntes - objetivo.getVida());
+    }
+
+    /** Sobrecarga: en modo furia el golpe suma la fuerza del escudo al dano. */
+    public String atacar(Personaje objetivo, boolean modoFuria) {
+        if (!modoFuria) {
+            return atacar(objetivo);
+        }
+        int vidaAntes = objetivo.getVida();
+        objetivo.defender(calcularDanio() + fuerzaEscudo);
+        return String.format("%s ataca a %s EN MODO FURIA y causa %d de dano",
+                getNombre(), objetivo.getNombre(), vidaAntes - objetivo.getVida());
     }
 }

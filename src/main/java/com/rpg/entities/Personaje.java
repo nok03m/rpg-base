@@ -29,12 +29,14 @@ public abstract class Personaje implements ICombatiente {
     private static final int DANIO_MINIMO = 1;
     private static final double PORCENTAJE_TOTAL = 100.0;
 
-    private String nombre;
+    protected String nombre;
     private final TipoPersonaje tipo;
     private int vidaMaxima;
-    private int vida;
-    private final int ataqueBase;
+    protected int vida;
+    protected final int ataqueBase;
     private final int defensaBase;
+    protected int posicionX;
+    protected int posicionY;
     private EstadoPersonaje estado = EstadoPersonaje.VIVO;
 
     private Arma arma;                  // asociacion 0..1
@@ -44,26 +46,47 @@ public abstract class Personaje implements ICombatiente {
     private final Map<String, EstadoEfecto> efectos = new LinkedHashMap<>();
 
     protected Personaje(String nombre, TipoPersonaje tipo) {
-        this(nombre, tipo, VIDA_BASE, ATAQUE_BASE, DEFENSA_BASE);
+        this(nombre, tipo, VIDA_BASE, ATAQUE_BASE, DEFENSA_BASE, 0, 0);
     }
 
     protected Personaje(String nombre, TipoPersonaje tipo, int vidaMaxima, int ataqueBase, int defensaBase) {
+        this(nombre, tipo, vidaMaxima, ataqueBase, defensaBase, 0, 0);
+    }
+
+    protected Personaje(String nombre, TipoPersonaje tipo, int vidaMaxima, int ataqueBase, int defensaBase,
+                         int posicionX, int posicionY) {
         validarNombre(nombre);
         if (vidaMaxima <= 0 || ataqueBase < 0 || defensaBase < 0) {
             throw new IllegalArgumentException("Estadisticas invalidas para " + nombre);
         }
+        validarPosicion(posicionX, posicionY);
         this.nombre = nombre;
         this.tipo = tipo;
         this.vidaMaxima = vidaMaxima;
         this.vida = vidaMaxima;
         this.ataqueBase = ataqueBase;
         this.defensaBase = defensaBase;
+        this.posicionX = posicionX;
+        this.posicionY = posicionY;
     }
 
     private static void validarNombre(String nombre) {
         if (nombre == null || nombre.isBlank()) {
             throw new IllegalArgumentException("El nombre no puede estar vacio");
         }
+    }
+
+    private static void validarPosicion(int posicionX, int posicionY) {
+        if (posicionX < 0 || posicionY < 0) {
+            throw new IllegalArgumentException("La posicion no puede ser negativa");
+        }
+    }
+
+    /** Cambia las coordenadas del personaje dentro del terreno de combate. */
+    public void moverA(int posicionX, int posicionY) {
+        validarPosicion(posicionX, posicionY);
+        this.posicionX = posicionX;
+        this.posicionY = posicionY;
     }
 
     // ---- combate
@@ -303,6 +326,14 @@ public abstract class Personaje implements ICombatiente {
 
     public int getVida() {
         return vida;
+    }
+
+    public int getPosicionX() {
+        return posicionX;
+    }
+
+    public int getPosicionY() {
+        return posicionY;
     }
 
     public int getVidaMaxima() {
