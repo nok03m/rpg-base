@@ -38,6 +38,32 @@ Hoy el juego no escribe ningun archivo: el progreso se guarda **en memoria** (`M
 y es el *estado de la partida*, que se actualiza cuando termina una pelea. El taller de **Manejo de Archivos**
 lleva ese estado a disco (buscalo con el comentario `TALLER ARCHIVOS`).
 
+## Persistencia MySQL con JDBC y DAO
+
+El proyecto incluye persistencia de héroes en MySQL. La opción **Gestionar héroes (BD)** permite
+insertar, listar, filtrar por tipo, actualizar el nivel y eliminar registros. **Cargar héroe desde BD**
+selecciona uno guardado y lo usa para iniciar un combate rápido.
+
+La capa está separada en `com.rpg.model` (`Heroe`, modelo sin JDBC), `com.rpg.dao` (`ConexionDB`
+y `HeroeDAO`, acceso SQL con `PreparedStatement` y cierre de recursos) y `com.rpg.controller` /
+`com.rpg.view` (reglas de entrada y menú). `Main` conecta estas capas. El conector oficial
+`mysql-connector-j` está declarado en `pom.xml`.
+
+### Preparar la base de datos
+
+1. Tener MySQL Server en ejecución.
+2. Ejecutar `schema.sql` una vez para crear `rpg_grupal_db` y la tabla `heroes`.
+3. Copiar `config.example.txt` como `config.txt` en la raíz del proyecto y reemplazar `usuario`
+   y `clave` por las credenciales locales. `config.txt` está excluido de Git.
+4. Abrir el proyecto como Maven en IntelliJ y ejecutar `com.rpg.Main`, o compilar con `mvn compile`.
+   Al ejecutar desde terminal, incluir el conector MySQL en el classpath de ejecución; Maven e IntelliJ
+   resuelven la dependencia declarada en el proyecto.
+
+Si MySQL no está disponible o falta `config.txt`, las opciones de base de datos muestran un mensaje
+de error y el resto del menú del juego sigue disponible. El héroe se guarda en la base con nombre,
+tipo, vida máxima y nivel; al cargarlo al combate se usa el nombre y tipo para construir la clase de
+personaje correspondiente del simulador.
+
 ## Estructura de paquetes
 
 ```
@@ -59,8 +85,12 @@ com.rpg
   items/                    Inventario<T>, Pocion
   exceptions/               JuegoException, SinManaException, CapacidadExcedidaException,
                             VidaInsuficienteException
-  concurrency/              VACIO a proposito (solo package-info.java)
-  persistencia/             VACIO a proposito (solo package-info.java), para el taller de archivos
+  concurrency/              temporizador, efectos continuos y auto-guardado daemon
+  controller/               reglas y coordinación de la gestión de héroes
+  dao/                      conexión JDBC y consultas parametrizadas a MySQL
+  model/                     POJO Heroe, independiente de JDBC
+  view/                      menú de gestión de héroes por consola
+  persistencia/             paquete reservado para el taller de archivos
 ```
 
 ## Lo que ya debes tener (checklist)
