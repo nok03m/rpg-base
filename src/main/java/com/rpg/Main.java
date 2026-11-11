@@ -2,6 +2,10 @@ package com.rpg;
 
 import com.rpg.core.Consola;
 import com.rpg.core.MotorJuego;
+import com.rpg.controller.HeroeController;
+import com.rpg.dao.HeroeDAO;
+import com.rpg.view.HeroeUI;
+import com.rpg.model.Heroe;
 
 import java.util.NoSuchElementException;
 import java.util.Scanner;
@@ -35,7 +39,7 @@ public class Main {
             mostrarMenu();
             // TALLER ARCHIVOS (secciones 3 a 5): el menu ahora llega hasta la opcion 7 y
             // delega en el motor las operaciones de archivos (ver log, cargar y borrar).
-            opcion = consola.leerEntero("Opcion: ", 0, 7);
+            opcion = consola.leerEntero("Opcion: ", 0, 9);
             switch (opcion) {
                 case 1 -> motor.combateRapido();
                 case 2 -> motor.jugarTorneo();
@@ -47,9 +51,17 @@ public class Main {
                 }
                 case 6 -> motor.cargarProgreso();
                 case 7 -> borrarPartidaConConfirmacion(consola, motor);
+                case 8 -> new HeroeUI(consola, new HeroeController(new HeroeDAO())).iniciar();
+                case 9 -> cargarHeroeDesdeBD(consola, motor);
                 default -> System.out.println("Hasta luego.");
             }
         } while (opcion != 0);
+    }
+
+    private static void cargarHeroeDesdeBD(Consola consola, MotorJuego motor) {
+        HeroeUI ui = new HeroeUI(consola, new HeroeController(new HeroeDAO()));
+        Heroe heroe = ui.elegirHeroe();
+        if (heroe != null) motor.combateRapidoDesdeBD(heroe);
     }
 
     /** Seccion 4: la partida se borra solo con confirmacion explicita del jugador. */
@@ -79,6 +91,8 @@ public class Main {
         System.out.println("5. Ver historial de combate (archivo)");
         System.out.println("6. Cargar partida guardada");
         System.out.println("7. Borrar partida guardada");
+        System.out.println("8. Gestionar heroes (BD)");
+        System.out.println("9. Cargar heroe desde BD");
         System.out.println("0. Salir");
     }
 }

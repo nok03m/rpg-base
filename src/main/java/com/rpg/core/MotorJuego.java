@@ -15,6 +15,7 @@ import com.rpg.entities.enums.TipoEfecto;
 import com.rpg.exceptions.CapacidadExcedidaException;
 import com.rpg.items.Inventario;
 import com.rpg.items.Pocion;
+import com.rpg.model.Heroe;
 import com.rpg.persistencia.EstadoPartida;
 import com.rpg.persistencia.GestorArchivos;
 
@@ -108,6 +109,28 @@ public class MotorJuego {
         guardarProgreso();
     }
 
+    /** Inicia un combate usando la identidad del heroe seleccionado en MySQL. */
+    public void combateRapidoDesdeBD(Heroe heroe) {
+        registro.limpiar();
+        Personaje jugador = heroe.getTipo().equals(Heroe.TIPO_MAGO)
+                ? new Mago(heroe.getNombre()) : new Guerrero(heroe.getNombre());
+        Enemigo enemigo = elegirEnemigo();
+        registro.agregar("%n=== %s vs %s ===", jugador.getNombre(), enemigo.getNombre());
+        GestorEfectos gestorEfectos = new GestorEfectos(INTERVALO_TICK_EFECTO_MS, registro);
+        jugador.setOyenteEfectos(gestorEfectos);
+        enemigo.setOyenteEfectos(gestorEfectos);
+        try {
+            boolean huyo = combatir(jugador, enemigo);
+            cerrarCombate(jugador, enemigo, huyo);
+        } finally {
+            gestorEfectos.detenerTodo();
+            jugador.limpiarEfectos();
+            enemigo.limpiarEfectos();
+            jugador.setOyenteEfectos(null);
+            enemigo.setOyenteEfectos(null);
+        }
+        guardarProgreso();
+    }
     public void jugarTorneo() {
         registro.limpiar();
         Personaje campeon = torneo.jugarTorneo();
